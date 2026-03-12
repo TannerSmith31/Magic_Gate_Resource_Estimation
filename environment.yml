@@ -1,0 +1,14 @@
+name: magic_state_research
+channels:
+  - conda-forge
+  - defaults
+dependencies:
+  - python=3.11
+  - pip
+  - pip:
+    - qiskit
+    - qiskit-aer
+    - stim
+    - pymatching
+    - numpy
+    - matplotlib
