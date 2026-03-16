@@ -4,10 +4,10 @@ from typing import Dict, Tuple, Literal
 QubitType = Literal['data', 'x_stab', 'z_stab']
 
 class LogicalQubit():
-    x_offset:int = -1
-    y_offset:int = -1
-    d_x:int = 0
-    d_y:int = 0
+    x_offset:int = -1               #x offset of the bottom left data qubit on the grid
+    y_offset:int = -1               #y offset of the bottom left data qubit on the grid
+    d_x:int = 0                     #x distance of the logical qubit
+    d_z:int = 0                     #z distance of the logical qubit
     physicalQubits: Dict[Tuple[int,int], QubitType] = {} #stores the qubits that make up this logical qubit {coordinate (x,y), qubitType}
 
     def __init__(self, x_offset:int, y_offset:int, d_x:int, d_z:int):
@@ -32,7 +32,7 @@ class LogicalQubit():
             for j in range(2, 2*d_z, 2):
                 x_coord = i + x_offset
                 y_coord = j + y_offset
-                if (x_coord+y_coord)%4 == 0:
+                if (i+j)%4 == 0:
                     self.physicalQubits[(x_coord,y_coord)] = 'z_stab'
                 else:
                     self.physicalQubits[(x_coord,y_coord)] = 'x_stab'
