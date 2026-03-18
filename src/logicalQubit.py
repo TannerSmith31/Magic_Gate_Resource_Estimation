@@ -114,30 +114,3 @@ class LogicalQubit():
         #filter candidates and only return ones that appear in the physical qubits of this logical qubit
         return [c for c in candidates if c in self.physicalQubits]
 
-
-Lqubit = LogicalQubit(x_offset = 1, y_offset=0, d_x=3, d_z=3)
-Lqubit.printLattice()
-
-# class SCCircut():
-
-# circuit = stim.Circuit("""
-#     H 0
-#     CNOT 0 1
-#     M 0 1                   
-# """)
-
-# sampler = circuit.compile_sampler()
-
-# samples = sampler.sample(shots=10)
-
-# print("Results of 10 shots (Qubit 0, Qubit 1):")
-# print(samples)
-
-# circuit = stim.Circuit.generated(
-#     "surface_code:rotated_memory_z",
-#     distance=3,
-#     rounds=10,
-#     after_clifford_depolarization=0.001 # Adding 0.1% noise
-# )
-
-# print(circuit)

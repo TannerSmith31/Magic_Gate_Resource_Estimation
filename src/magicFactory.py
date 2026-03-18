@@ -7,7 +7,7 @@ class MagicFactory:
     outputStateCnt:int  #number of magic states output by the factory
     outErrorRate:float   #error rate of the magic states produced by the factory
     distillationTime:float   #number of cycles to run a full distillation
-    qubitFootprint:int       #number of qubits required for the factory
+    qubitFootprint:int       #number of physical qubits required for the factory
 
     def __init__(self, gate:str, inputStateCnt:int, outputStateCnt:int, outErrorRate:float, distillationTime:float, qubitFootprint:int):
         self.gate = gate
@@ -41,8 +41,10 @@ class MagicFactory:
             p_fail = 0
             outErrorRate = 1.9 * 10**(-11)
         else:
-            print("unknown d_x, d_z, d_m, p_phys combo for 15 to 1 factory")
-            print("setting p_fail and outErrorRate to 0")
+            print("WARNING: unknown d_x, d_z, d_m, p_phys combo for 15 to 1 factory")
+            print("setting p_fail to 10^-3 and outErrorRate = p_phys^((d_x+1)/4)")
+            p_fail = 10**(-3)
+            outErrorRate = p_phys**((d_x+1)/4) # This seems to approximate the error rates given in the 'Not as Costly' paper fairly well
         
         qubitFootprint =  2*(d_x + 4*d_z) * 3*d_x + 4*d_m #This equation appears in section 3 of the 'not as costly' paper
         distillationTime = 6 * d_m / (1-p_fail)           #This equation appears in section 3 of the 'not as costly paper
@@ -56,19 +58,19 @@ class MagicFactory:
             qubitFootprint = qubitFootprint,
         )
     
-    @classmethod
-    def T_factory_20_to_4(cls, d_x, d_z, d_m, p_phys):
-        #TODO calcluate variables
-        #qubitFootprint =
-        #cycles =
-        #outErrorRate = 22 * p**2 #the error rate that the ouput |m>^4 state has an error is 22p^2, but since this will implement 4 T gates, the fail rate of each state is 5.5p^2
+    # @classmethod
+    # def T_factory_20_to_4(cls, d_x, d_z, d_m, p_phys):
+    #     #TODO calcluate variables
+    #     #qubitFootprint =
+    #     #cycles =
+    #     #outErrorRate = 22 * p**2 #the error rate that the ouput |m>^4 state has an error is 22p^2, but since this will implement 4 T gates, the fail rate of each state is 5.5p^2
 
-        return cls(
-            gate = "T",
-            inputStateCnt = 20,
-            outputStateCnt = 4,
+    #     return cls(
+    #         gate = "T",
+    #         inputStateCnt = 20,
+    #         outputStateCnt = 4,
 
-        )
+    #     )
     
     @classmethod
     def CCZ_factory(cls):
