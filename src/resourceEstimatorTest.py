@@ -7,7 +7,7 @@ def testNullCircuit():
 	try:
 		factory = MagicFactory("", 0, 0, 0, 0, 0)
 		estimator = ResourceEstimator(factory, None)
-		estimator.decomposeToCliffordPlusMagic()
+		estimator.decomposeToCliffordPlusMagic(1)
 	except ValueError:
 		pass
 	else:
@@ -17,7 +17,7 @@ def testNullFactory():
 	try:
 		circuit = QuantumCircuit(2, 0)
 		estimator = ResourceEstimator(None, circuit)
-		estimator.decomposeToCliffordPlusMagic()
+		estimator.decomposeToCliffordPlusMagic(1)
 	except ValueError:
 		pass
 	else:
