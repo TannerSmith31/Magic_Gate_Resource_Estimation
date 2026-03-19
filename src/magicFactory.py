@@ -1,5 +1,5 @@
-import qiskit
-from utils import calcLER, calcProbErr_X_Z
+import math
+from utils import calcLER, calcProbErr_X_Z, QuantumGate
 
 class MagicFactory:
     gate:str            #gate being distilled (T, CCZ, ...)
@@ -9,7 +9,7 @@ class MagicFactory:
     distillationTime:float   #number of cycles to run a full distillation
     qubitFootprint:int       #number of physical qubits required for the factory
 
-    def __init__(self, gate:str, inputStateCnt:int, outputStateCnt:int, outErrorRate:float, distillationTime:float, qubitFootprint:int):
+    def __init__(self, gate:QuantumGate, inputStateCnt:int, outputStateCnt:int, outErrorRate:float, distillationTime:float, qubitFootprint:int):
         self.gate = gate
         self.inputStateCnt = inputStateCnt
         self.outputStateCnt = outputStateCnt
@@ -24,6 +24,7 @@ class MagicFactory:
             d_z: z code distance
             d_m: number of code cycles used in lattice surgery
             p_phys: error rate of the physical qubits
+        NOTE: this factory takes in |+> qubits and outputs |T> magic states   TODO: double check this is the case
     """
     @classmethod
     def T_factory_15_to_1(cls, d_x:int, d_z:int, d_m:int, p_phys:float):
@@ -50,7 +51,7 @@ class MagicFactory:
         distillationTime = 6 * d_m / (1-p_fail)           #This equation appears in section 3 of the 'not as costly paper
 
         return cls(
-            gate = "T",
+            gate = QuantumGate.T,
             inputStateCnt = 15,
             outputStateCnt = 1,
             outErrorRate = outErrorRate,
@@ -58,22 +59,61 @@ class MagicFactory:
             qubitFootprint = qubitFootprint,
         )
     
-    # @classmethod
-    # def T_factory_20_to_4(cls, d_x, d_z, d_m, p_phys):
-    #     #TODO calcluate variables
-    #     #qubitFootprint =
-    #     #cycles =
-    #     #outErrorRate = 22 * p**2 #the error rate that the ouput |m>^4 state has an error is 22p^2, but since this will implement 4 T gates, the fail rate of each state is 5.5p^2
-
-    #     return cls(
-    #         gate = "T",
-    #         inputStateCnt = 20,
-    #         outputStateCnt = 4,
-
-    #     )
-    
+    """
+        15 to 1 T factory introduced in 'Low Overhead Quantum Computing with Lattice Surgery'. It is a little more space costly than the 15 to 1 factory
+        from the 'Not as costly as you think' paper but provides better output fidelity (according to the equations).
+            d: code distance used to encode logical qubits
+            p_in: error rate of the states going into the distillation (this is the physical error rate if we are making a level 1 factory)
+        NOTE: This factory takes in noisy |T> magic states and outputs cleaner |T> magic states
+    """
     @classmethod
-    def CCZ_factory(cls):
+    def T_factory_15_to_1_Old(cls, d, p_in):
+        
+        qubitFootprint = (4*d) * (8*d)
+        numCycles = 6.5*d  #I got this eq from the paper this factory is from under section X. Distillation
+        outErrorRate = 35 * p_in**3 #assuming that the input of the factory is 
+
+        return cls(
+            gate = QuantumGate.T,
+            inputStateCnt = 15,
+            outputStateCnt = 1,
+            qubitFootprint = qubitFootprint,
+            outErrorRate = outErrorRate,
+            distillationTime = numCycles
+        )
+    
+    """
+        CCZ factory based on the paper 'Efficient magic state factories with a catalyzed |CCZ> -> 2|T> transformation'
+            T_Factory: The factory/protocol that is generating the T states to be used in the generation of the CCZ state
+                NOTE: this must be a T factory. Also, the paper uses T factories that have half the code distance as the CCZ part of the factory
+            d_CZZ is the code distance used for the CCZ distillation that distills the |T1> states into a CCZ state
+    """
+    @classmethod
+    def CCZ_factory(cls, T_Factory: MagicFactory, d_CCZ: int):
+        
+        if T_Factory.gate != QuantumGate.T:  #CCZ factory works by using T gates distilled from T factories
+            raise ValueError(f'CCZ_factory param T_Factory must be a T gate factory but was a {T_Factory.gate} gate factory')
+        
+        CCZ_distillationTime = 5.5 * d_CCZ #it takes 10-11 cycles to produce 2 CCZ states when overlapped so roughly 5.5d cycles per state
+        numT1Factories = math.ceil((8*T_Factory.distillationTime)/CCZ_distillationTime) #we need enough T1 factories to produce 8|T> states in the time it takes to make one CCZ state (5.5d_CCZ cycles)
+        T1FactoryFootprint = T_Factory.qubitFootprint #The size of a level 1 T gate factory
+        CCZFactoryFootprint = 3*6*d_CCZ #The size of just the CCZ distillation part of the CCZ factory
+        qubitFootprint = numT1Factories*T1FactoryFootprint + CCZFactoryFootprint #Total space of CCZ distillation (1 CCZdistillation fed by numT1Factories Tgate factories)
+        outErrorRate = 28* (T_Factory.outErrorRate)**2  #TODO: this is the out error rate if it is distillation limited (i.e. the code distance of the T and CCZ factories is high enough that it isn't the source of most error. However, it is possible that with low code distances, it does not get this good) Fix this to adjust error rate based on if the code distance is the bottleneck or if the distillation is the bottle neck.
+        return cls(
+            gate = QuantumGate.CCZ,
+            inputStateCnt = 15,
+            outputStateCnt = 1,
+            outErrorRate = outErrorRate,
+            distillationTime = CCZ_distillationTime,
+            qubitFootprint = qubitFootprint,
+        )
+    
+    """
+        Catalyzed |CCZ> -> 2|T> factory based on paper 'Efficient magic state factories with a catalyzed |CCZ> -> 2|T> transformation'
+    """
+    @classmethod
+    def catalyzed_CCZ_to_2T_factory(cls, CCZ_Factory, d_T):
         #TODO: implement factory
         return
     
@@ -87,9 +127,6 @@ class MagicFactory:
         #TODO: implement factory
         return
     
-
-MagicFactory.T_factory_15_to_1(d_x=7, d_z=3, d_m=3, p_phys=0.0001)
-
 
 
 

@@ -1,0 +1,1 @@
+#TODO make a test for CCZ where I pass in a T factory based on the 'efficient magic state factories CCZ->2T' paper and it should calculate the number of factories needed to be 5 if the code distance of the T factories is half that of the CCZ factory
