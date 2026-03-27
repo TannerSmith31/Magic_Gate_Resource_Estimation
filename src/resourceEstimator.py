@@ -29,7 +29,7 @@ class ResourceEstimator:
         for gate in CliffordGates:
             gates.append(gate)
 
-        decomposer = CircuitDecomposer(gates, self.quantumCircuit, errorRate)
+        decomposer = CircuitDecomposer(gates, errorRate, self.quantumCircuit)
         decomposedCircuit = decomposer.decomposeToGateset()
         return decomposedCircuit
 

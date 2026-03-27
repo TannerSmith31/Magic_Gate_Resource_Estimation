@@ -1,3 +1,5 @@
+import mpmath
+
 from resourceEstimator import ResourceEstimator
 from qiskit import QuantumCircuit
 from magicFactory import MagicFactory
@@ -26,6 +28,9 @@ def testNullFactory():
 def testCliffordPlusT():
 	circuit = QuantumCircuit(4, 0)
 	factory = MagicFactory("T", 0, 0, 0, 0, 0)
+
+	circuit.rz(0.3, 0)
+
 	estimator = ResourceEstimator([factory], circuit)
 	estimator.decomposeToCliffordPlusMagic(1)
 
