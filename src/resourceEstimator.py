@@ -1,7 +1,8 @@
 from magicFactory import MagicFactory
 from typing import List
 from qiskit import QuantumCircuit
-from circuitDecomposer import CliffordGates, CircuitDecomposer
+from circuitDecomposer import CircuitDecomposer
+from utils import QuantumGate
 
 
 class ResourceEstimator:
@@ -17,7 +18,7 @@ class ResourceEstimator:
         self.p_phys = p_phys
 
     #TODO: function to decompose circuit into clifford + whatever magic state is made by the factories
-    def decomposeToCliffordPlusMagic(self, errorRate):
+    def decomposeToCliffordPlusMagic(self, errorRate:float):
         # Raise an error if magicFactories or quantumCircuit is null.
         if self.magicFactories == None:
             raise ValueError("ResourceEstimator.magicFactories should not be null.")
@@ -28,8 +29,9 @@ class ResourceEstimator:
         gates = []
         for factory in self.magicFactories:
             gates.append(factory.gate)
-        for gate in CliffordGates:
-            gates.append(gate)
+        for gate in QuantumGate:
+            if gate.isClifford():
+                gates.append(gate)
 
         decomposer = CircuitDecomposer(gates, errorRate, self.quantumCircuit)
         decomposedCircuit = decomposer.decomposeToGateset()

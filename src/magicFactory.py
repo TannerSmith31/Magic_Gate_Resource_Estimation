@@ -135,6 +135,7 @@ class MagicFactory:
     @classmethod
     def sqrtT_factory(cls):
         #TODO: implement factory
+        
         return
     
 
