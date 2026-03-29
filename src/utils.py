@@ -18,3 +18,6 @@ def calcProbErr_X_Z(p_phys:float, d_x:int, d_z:int):
     probXerr = 0.5 * (d_z / d_x) * calcLER(p_phys, d_x)
     probZerr = 0.5 * (d_x / d_z) * calcLER(p_phys, d_z)
     return probXerr, probZerr
+
+def dagger(matrix):
+    return "TODO: Implement dagger."

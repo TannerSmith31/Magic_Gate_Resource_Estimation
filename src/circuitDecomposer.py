@@ -4,7 +4,9 @@ from qiskit.visualization import plot_histogram
 from typing import Literal
 from pygridsynth.gridsynth import gridsynth_gates, gridsynth_circuit
 import mpmath
-import trasyn
+import numpy as np
+
+from utils import dagger
 
 Gates = Literal['X', 'Y', 'Z', 'CX', 'CZ', 'H', 'S', 'CNOT', 'SX', 'T', 'CCZ', 'sqrtT', 'R_z', 'T/2']
 
@@ -24,13 +26,51 @@ class CircuitDecomposer:
 		self.decomposedCircuit = QuantumCircuit(self.originalCircuit.num_qubits, self.originalCircuit.num_clbits)
 	
 	def decomposeToGateset(self):
-		if 'T' in self.gateSet:
-			return self.decomposeToCliffordPlusT()
+		# Use numpy matrices.
+		#if 'T' in self.gateSet:
+			#return self.decomposeToCliffordPlusT()
 		#TODO: take the original circuit from this object and decompose it into the gateSet of this object
 
 		#TODO: set the decomposedCircuit to the one we just created and then return the decomposed circuit
 		return "TODO: IMPLEMENT decomposeToGateset function"
+	
+	def basicApproximationHelper(self, numGates, currSet):
+		if numGates == 0:
+			return currSet
+		else:
+			newSet = currSet
+			for combination in currSet:
+				for gate in self.gateSet:
+					newSet.add(combination + gate)
+			return "TODO: Implement basicApproximationHelper function."
+	
+	def basicApproximation(self, U):
+		options = self.basicApproximationHelper(6, set(self.gateSet)) # TODO: Find a good numGates.
+		return "TODO: Implement basicApproximation function."
+	
+	def gcDecompose(self, input):
+		return "TODO: Implement gcDecompose function."
 
+	# function Solovay-Kitaev(Gate U , depth n)
+	def solovayKitaev(self, U , n):
+		# if (n == 0)
+		if n == 0:
+			# Return Basic Approximation to U
+			return self.basicApproximation(U)
+		# else
+		else:
+			# Set Un−1 = Solovay-Kitaev(U, n − 1)
+			UNMinusOne = self.solovayKitaev(U, n - 1)
+			# Set V , W = GC-Decompose(U U^†_{n − 1})
+			V, W = self.gcDecompose(np.dot(U, dagger(UNMinusOne)))
+			# Set Vn−1 = Solovay-Kitaev(V ,n − 1)
+			VNMinusOne = self.solovayKitaev(V, n - 1)
+			# Set Wn−1 = Solovay-Kitaev(W ,n − 1)
+			WNMinusOne = self.solovayKitaev(W, n - 1)
+			# Return Un = Vn−1Wn−1V †  n−1W †  n−1Un−1;
+			return np.dot(np.dot(np.dot(np.dot(VNMinusOne, WNMinusOne), dagger(VNMinusOne)), dagger(WNMinusOne)), UNMinusOne)
+		return "TODO: Implement solovayKitaev function."
+	
 	def decomposeToCliffordPlusT(self):
 		mpmath.mp.dps = 128
 		epsilon = mpmath.mpf("1e-10")
@@ -59,4 +99,6 @@ class CircuitDecomposer:
 
 				# Not Sure why this is causing an error.
 				# print(trasyn.synthesize(target_unitary=theta, nonclifford_budget=100))
+
+		# Might use SK instead for consistency of comparison.
 		return self.decomposedCircuit
