@@ -11,4 +11,5 @@ def test_default_constructor():
     assert mock_magicFactory.distillationTime == 5.5
     assert mock_magicFactory.qubitFootprint == 25
 
-#TODO: test CZZ factory where I pass in a T factory based on the one int the CCZ->2T paper and it should calculate the number of factories needed to be 5 if the code distance of the T factories is half that of the CCZ factory
+#TODO: test that the CCZ factory where I pass in T factory based on the one in the CCZ->2T paper and give the distance of the T factory to be half the distance of the CCZ factory it should come out to a cycle time of 5.5 cycles THIS WILL THEN ENSURE THE TODO TEST RIGHT BELOW THIS HAS THE RIGHT NUM FACTORIES DECIDED)
+#TODO: test CZZ factory where I pass in a T factory based on the one in the CCZ->2T paper and it should calculate the number of factories needed to be 5 if the code distance of the T factories is half that of the CCZ factory

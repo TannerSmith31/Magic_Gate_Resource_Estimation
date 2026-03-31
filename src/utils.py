@@ -18,6 +18,7 @@ class QuantumGate(Enum):
     sqrtT = "sqrtT"
     R_z = "R_z"
     Tdiv2 = "T/2"
+    Tdg = "Tdagger"
 
     @property
     def is_clifford(self) -> bool:
