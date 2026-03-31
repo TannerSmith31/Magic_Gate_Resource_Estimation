@@ -3,28 +3,24 @@ from qiskit_aer import AerSimulator
 from qiskit.visualization import plot_histogram
 from typing import Literal
 from pygridsynth.gridsynth import gridsynth_gates, gridsynth_circuit
+from utils import QuantumGate
 import mpmath
 import numpy as np
 
 from utils import dagger
 
-Gates = Literal['X', 'Y', 'Z', 'CX', 'CZ', 'H', 'S', 'CNOT', 'SX', 'T', 'CCZ', 'sqrtT', 'R_z', 'T/2']
-
-CliffordGates = Literal['H', 'S', 'CNOT', 'SX']
-NonCliffordGates = Literal['T', 'CCZ', 'sqrtT', 'R_z', 'T/2']
-
-class CircuitDecomposer:
-	gateSet: list[Gates]              #List of gates that we will decompose the arbitrary circuit into
+class circuitDecomposer:
+	gateSet: list[QuantumGate]        #List of gates that we will decompose the arbitrary circuit into
 	decompositionError: float         #tolerable error for each gate when decomposing a circuit
 	originalCircuit: QuantumCircuit   #the original non-decomposed circuit comprised of arbitrary gates
 	decomposedCircuit: QuantumCircuit #the decomposed circuit comprised of only gates in our gateSet
-
-	def __init__(self, gateSet, decompositionError, originalCircuit):
+	
+	def __init__(self, gateSet:list[QuantumGate], decompositionError:float, originalCircuit:QuantumCircuit):
 		self.gateSet = gateSet
 		self.decompositionError = decompositionError
 		self.originalCircuit = originalCircuit
 		self.decomposedCircuit = QuantumCircuit(self.originalCircuit.num_qubits, self.originalCircuit.num_clbits)
-	
+
 	def decomposeToGateset(self):
 		# Use numpy matrices.
 		#if 'T' in self.gateSet:
@@ -69,7 +65,6 @@ class CircuitDecomposer:
 			WNMinusOne = self.solovayKitaev(W, n - 1)
 			# Return Un = Vn−1Wn−1V †  n−1W †  n−1Un−1;
 			return np.dot(np.dot(np.dot(np.dot(VNMinusOne, WNMinusOne), dagger(VNMinusOne)), dagger(WNMinusOne)), UNMinusOne)
-		return "TODO: Implement solovayKitaev function."
 	
 	def decomposeToCliffordPlusT(self):
 		mpmath.mp.dps = 128

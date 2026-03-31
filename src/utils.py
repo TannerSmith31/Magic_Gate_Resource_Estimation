@@ -1,4 +1,27 @@
+from enum import Enum
 
+"""
+    Enum of all the quantum gates we will be dealing with
+"""
+class QuantumGate(Enum):
+    # CLIFFORD
+    X = "X"
+    Y = "Y"
+    Z = "Z"
+    H = "H"
+    CX = "CX"
+    S = "S"
+
+    # NON CLIFFORD
+    T = "T"
+    CCZ = "CCZ"
+    sqrtT = "sqrtT"
+    R_z = "R_z"
+    Tdiv2 = "T/2"
+
+    @property
+    def is_clifford(self) -> bool:
+        return self in {QuantumGate.X, QuantumGate.Y, QuantumGate.Z, QuantumGate.H, QuantumGate.CX, QuantumGate.S}
 
 """
     Calculates the logical error rate of a surface code based on a physical error rate p_phys and a code distance d
