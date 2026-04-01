@@ -8,7 +8,7 @@ from magicFactory import MagicFactory
 def testNullCircuit():
 	try:
 		factory = MagicFactory("", 0, 0, 0, 0, 0)
-		estimator = ResourceEstimator([factory], None)
+		estimator = ResourceEstimator([factory], None, 1, 1.0)
 		estimator.decomposeToCliffordPlusMagic(1)
 	except ValueError:
 		pass
@@ -18,7 +18,7 @@ def testNullCircuit():
 def testNullFactory():
 	try:
 		circuit = QuantumCircuit(2, 0)
-		estimator = ResourceEstimator(None, circuit)
+		estimator = ResourceEstimator(None, circuit, 1, 1.0)
 		estimator.decomposeToCliffordPlusMagic(1)
 	except ValueError:
 		pass
@@ -31,7 +31,7 @@ def testCliffordPlusT():
 
 	circuit.rz(0.3, 0)
 
-	estimator = ResourceEstimator([factory], circuit)
+	estimator = ResourceEstimator([factory], circuit, 1, 1.0)
 	estimator.decomposeToCliffordPlusMagic(1)
 
 testNullCircuit()

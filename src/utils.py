@@ -1,4 +1,5 @@
 from enum import Enum
+import numpy as np
 
 """
     Enum of all the quantum gates we will be dealing with
@@ -43,4 +44,6 @@ def calcProbErr_X_Z(p_phys:float, d_x:int, d_z:int):
     return probXerr, probZerr
 
 def dagger(matrix):
-    return "TODO: Implement dagger."
+    newMatrix = np.matrix_transpose(matrix)
+    newMatrix = np.conjugate(newMatrix)
+    return newMatrix

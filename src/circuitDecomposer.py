@@ -1,4 +1,7 @@
+import math
+
 from qiskit import QuantumCircuit
+from qiskit.quantum_info import Operator, Pauli
 from qiskit_aer import AerSimulator
 from qiskit.visualization import plot_histogram
 from typing import Literal
@@ -9,7 +12,7 @@ import numpy as np
 
 from utils import dagger
 
-class circuitDecomposer:
+class CircuitDecomposer:
 	gateSet: list[QuantumGate]        #List of gates that we will decompose the arbitrary circuit into
 	decompositionError: float         #tolerable error for each gate when decomposing a circuit
 	originalCircuit: QuantumCircuit   #the original non-decomposed circuit comprised of arbitrary gates
@@ -27,6 +30,9 @@ class circuitDecomposer:
 			#return self.decomposeToCliffordPlusT()
 		#TODO: take the original circuit from this object and decompose it into the gateSet of this object
 
+		for inst in self.originalCircuit.data:
+			U = inst.
+
 		#TODO: set the decomposedCircuit to the one we just created and then return the decomposed circuit
 		return "TODO: IMPLEMENT decomposeToGateset function"
 	
@@ -37,12 +43,23 @@ class circuitDecomposer:
 			newSet = currSet
 			for combination in currSet:
 				for gate in self.gateSet:
-					newSet.add(combination + gate)
-			return "TODO: Implement basicApproximationHelper function."
+					newSet.add([combination[0].append(gate.name), combination[1].tensor(Pauli(gate.name))])
+			return newSet
 	
 	def basicApproximation(self, U):
 		options = self.basicApproximationHelper(6, set(self.gateSet)) # TODO: Find a good numGates.
-		return "TODO: Implement basicApproximation function."
+		currentOption = None
+		minOperatorNorm = math.inf
+		for option in options:
+			
+			subtractedMatrix = U - option
+			# This is how Wolfram Alpha says to do an operator norm, at least to my understanding.
+			optionOperatorNorm = math.sqrt(max(np.linalg.eig(np.linalg.dot(np.linalg.matrix_transpose(subtractedMatrix), subtractedMatrix))))
+			if optionOperatorNorm < minOperatorNorm:
+				minOperatorNorm = optionOperatorNorm
+				currentOption = option
+			
+		return currentOption
 	
 	def gcDecompose(self, input):
 		return "TODO: Implement gcDecompose function."

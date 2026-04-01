@@ -30,7 +30,7 @@ class ResourceEstimator:
         for factory in self.magicFactories:
             gates.append(factory.gate)
         for gate in QuantumGate:
-            if gate.isClifford():
+            if gate.is_clifford:
                 gates.append(gate)
 
         decomposer = CircuitDecomposer(gates, errorRate, self.quantumCircuit)
