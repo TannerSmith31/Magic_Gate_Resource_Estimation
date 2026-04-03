@@ -1,5 +1,6 @@
 from enum import Enum
 import numpy as np
+from scipy.linalg import sqrtm
 
 """
     Enum of all the quantum gates we will be dealing with
@@ -24,6 +25,10 @@ class QuantumGate(Enum):
     def is_clifford(self) -> bool:
         return self in {QuantumGate.X, QuantumGate.Y, QuantumGate.Z, QuantumGate.H, QuantumGate.CX, QuantumGate.S}
 
+    @property
+    def is_2x2(self) -> bool:
+        return self in {QuantumGate.X, QuantumGate.Y, QuantumGate.Z, QuantumGate.H, QuantumGate.S, QuantumGate.T, QuantumGate.sqrtT, QuantumGate.R_z, QuantumGate.Tdiv2}
+
 """
     Calculates the logical error rate of a surface code based on a physical error rate p_phys and a code distance d
     The equation used is based on the one presented in sec 2 of the paper 'Magic State Distillation: Not as Costly as you Think'
@@ -47,3 +52,8 @@ def dagger(matrix):
     newMatrix = np.matrix_transpose(matrix)
     newMatrix = np.conjugate(newMatrix)
     return newMatrix
+
+def operatorNorm(matrix0, matrix1):
+    subtractedMatrix = matrix0 - matrix1
+	# This is how Wolfram Alpha says to do an operator norm, at least to my understanding.
+    return sqrtm(max(np.linalg.eig(np.matmul(np.linalg.matrix_transpose(subtractedMatrix), subtractedMatrix)).eigenvalues))

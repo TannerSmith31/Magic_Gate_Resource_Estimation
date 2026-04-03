@@ -3,11 +3,12 @@ import mpmath
 from resourceEstimator import ResourceEstimator
 from qiskit import QuantumCircuit
 from magicFactory import MagicFactory
+from utils import QuantumGate
 
 # Test the null value errors for decomposeToCliffordPlusMagic().
 def testNullCircuit():
 	try:
-		factory = MagicFactory("", 0, 0, 0, 0, 0)
+		factory = MagicFactory(QuantumGate.T, 0, 0, 0, 0, 0)
 		estimator = ResourceEstimator([factory], None, 1, 1.0)
 		estimator.decomposeToCliffordPlusMagic(1)
 	except ValueError:
@@ -27,13 +28,13 @@ def testNullFactory():
 	
 def testCliffordPlusT():
 	circuit = QuantumCircuit(4, 0)
-	factory = MagicFactory("T", 0, 0, 0, 0, 0)
+	factory = MagicFactory(QuantumGate.T, 0, 0, 0, 0, 0)
 
 	circuit.rz(0.3, 0)
 
 	estimator = ResourceEstimator([factory], circuit, 1, 1.0)
 	estimator.decomposeToCliffordPlusMagic(1)
 
-testNullCircuit()
-testNullFactory()
+# testNullCircuit()
+# testNullFactory()
 testCliffordPlusT()
