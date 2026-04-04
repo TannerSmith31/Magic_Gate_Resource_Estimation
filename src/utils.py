@@ -5,25 +5,30 @@ from enum import Enum
 """
 class QuantumGate(Enum):
     # CLIFFORD
-    X = "X"
-    Y = "Y"
-    Z = "Z"
-    H = "H"
-    CX = "CX"
-    S = "S"
+    X = "x"
+    Y = "y"
+    Z = "z"
+    H = "h"
+    CX = "cx"
+    S = "s"
 
     # NON CLIFFORD
-    T = "T"
-    CCZ = "CCZ"
+    T = "t"
+    CCZ = "ccz"
     sqrtT = "sqrtT"
-    R_z = "R_z"
+    rootT_4 = "4rootT"
+    rootT_8 = "8rootT"
+    rootT_16 = "16rootT"
+    rootT_32 = "32rootT"
+    R_z = "Rz"
+    PHASE = "p"
     Tdiv2 = "T/2"
     Tdg = "Tdagger"
 
     @property
-    def is_clifford(self) -> bool:
+    def isClifford(self) -> bool:
         return self in {QuantumGate.X, QuantumGate.Y, QuantumGate.Z, QuantumGate.H, QuantumGate.CX, QuantumGate.S}
-
+    
 """
     Calculates the logical error rate of a surface code based on a physical error rate p_phys and a code distance d
     The equation used is based on the one presented in sec 2 of the paper 'Magic State Distillation: Not as Costly as you Think'

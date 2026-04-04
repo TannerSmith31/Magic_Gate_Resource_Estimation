@@ -37,3 +37,8 @@ def testCliffordPlusT():
 testNullCircuit()
 testNullFactory()
 testCliffordPlusT()
+
+
+
+#TODO: test the gate count function with barriers to make sure it skips barriers
+#TODO; test for division by zero in run circuit when creating the noise model for the magic gates

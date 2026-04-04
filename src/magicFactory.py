@@ -3,24 +3,27 @@ import math
 from src.utils import calcLER, calcProbErr_X_Z, QuantumGate
 
 class MagicFactory:
-    gate:str            #gate being distilled (T, CCZ, ...)
-    inputStateCnt:int   #number of states input into the factor to be distilled
-    outputStateCnt:int  #number of magic states output by the factory
-    outErrorRate:float   #error rate of the magic states produced by the factory
-    distillationTime:float   #number of cycles to run a full distillation
-    qubitFootprint:int       #number of physical qubits required for the factory
-    codeDistance:int        #code distance used to implement this factory
-    subFactory: MagicFactory|None #Subfactories used within this magic factory (e.g. CCZ factory uses multiple T factories to create magic state)
+    gates: list[QuantumGate]                #gate(s) being distilled (T, CCZ, ...)
+    inStateCnts: dict[QuantumGate,int]      #number of each type of state input into the factor to be distilled
+    outStateCnts: dict[QuantumGate,int]     #number of each type of magic state output by the factory
+    outErrorRates: dict[QuantumGate,float]   #error rate of the magic states produced by the factory
+    distillationCycles: float               #number of cycles to run a full distillation
+    distillationTime: float              #amount of 'time' to run a full distillation. Note, 'Time' is number of stabelizer measurements (cycles*d). This accounts for code distance slowing down the factory
+    qubitFootprint:int                      #number of physical qubits required for the factory
+    codeDistance:int                        #code distance used to implement this factory
+    subFactories: list[MagicFactory]|None   #Subfactories used within this magic factory (e.g. CCZ factory uses multiple T factories to create magic state)
 
-    def __init__(self, gate:QuantumGate, inputStateCnt:int, outputStateCnt:int, outErrorRate:float, distillationTime:float, qubitFootprint:int, codeDistance:int, subFactory:MagicFactory|None = None):
-        self.gate = gate
-        self.inputStateCnt = inputStateCnt
-        self.outputStateCnt = outputStateCnt
-        self.outErrorRate = outErrorRate
+    def __init__(self, gates:list[QuantumGate], inStateCnts:dict[QuantumGate,int], outStateCnts:dict[QuantumGate,int], outErrorRates:dict[QuantumGate,float], 
+                 distillationCycles:float, distillationTime:float, qubitFootprint:int, codeDistance:int, subFactories:list[MagicFactory]|None = None):
+        self.gates = gates
+        self.inStateCnts = inStateCnts
+        self.outStateCnts = outStateCnts
+        self.outErrorRates = outErrorRates
+        self.distillationCycles = distillationCycles
         self.distillationTime = distillationTime
         self.qubitFootprint = qubitFootprint
         self.codeDistance = codeDistance
-        self.subFactory = subFactory
+        self.subFactories = subFactories
 
 
     """
@@ -32,18 +35,18 @@ class MagicFactory:
         NOTE: this factory takes in |+> qubits and outputs |T> magic states   TODO: double check this is the case
     """
     @classmethod
-    def T_factory_15_to_1(cls, d_x:int, d_z:int, d_m:int, p_phys:float):
+    def T_factory_15_to_1(cls, d_x:int, d_z:int, d_m:int, p_phys:float) -> MagicFactory:
 
         #TODO: FIGURE OUT HOW THEY CALCULATE outErrorRate and p_fail SO I DONT HAVE TO HARD CODE THE EXAMPLES HERE
         p_fail = 0   #the probability the distilation protocol fails
         outErrorRate = 0    #error rate of the produced magic state causing a faulty rotation
-        if (d_x==7 and d_z == 3 and d_m ==3 and p_phys == 10**(-4)):
+        if (d_x==7 and d_z == 3 and d_m == 3 and math.isclose(p_phys, 1e-4)):
             p_fail = 0.005524
-            outErrorRate = 10**(-8)
-        elif (d_x==9 and d_z==3 and d_z ==3 and p_phys == 10**(-4)):
+            outErrorRate = 4.4 * 10**(-8)
+        elif (d_x==9 and d_z==3 and d_m ==3 and math.isclose(p_phys, 1e-4)):
             p_fail = 0.005524
-            outErrorRate = 9.3*10**(-10)
-        elif (d_x==11 and d_z==5 and d_z == 5 and p_phys == 10**(-4)):
+            outErrorRate = 9.3 * 10**(-10)
+        elif (d_x==11 and d_z==5 and d_m == 5 and math.isclose(p_phys, 1e-4)):
             p_fail = 0
             outErrorRate = 1.9 * 10**(-11)
         else:
@@ -53,13 +56,15 @@ class MagicFactory:
             outErrorRate = p_phys**((d_x+1)/4) # This seems to approximate the error rates given in the 'Not as Costly' paper fairly well
         
         qubitFootprint =  2*(d_x + 4*d_z) * 3*d_x + 4*d_m #This equation appears in section 3 of the 'not as costly' paper
-        distillationTime = 6 * d_m / (1-p_fail)           #This equation appears in section 3 of the 'not as costly paper
+        distillationCycles = 6 * d_m / (1-p_fail)           #This equation appears in section 3 of the 'not as costly paper
+        distillationTime = distillationCycles * max(d_x,d_z)  #This gets us the number of stabelizer measurements
 
         return cls(
-            gate = QuantumGate.T,
-            inputStateCnt = 15,
-            outputStateCnt = 1,
-            outErrorRate = outErrorRate,
+            gates = [QuantumGate.T],  
+            inStateCnts = {QuantumGate.H:15}, #TODO: figure out a way to change this. Its technically the |+> state that goes in
+            outStateCnts = {QuantumGate.T:1},
+            outErrorRates = {QuantumGate.T:outErrorRate},
+            distillationCycles = distillationCycles,
             distillationTime = distillationTime,
             qubitFootprint = qubitFootprint,
             codeDistance = d_x, #TODO: maybe adjust the class to take in more than just one code distance so we can also account for d_z
@@ -70,22 +75,24 @@ class MagicFactory:
         from the 'Not as costly as you think' paper but provides better output fidelity (according to the equations).
             d: code distance used to encode logical qubits
             p_in: error rate of the states going into the distillation (this is the physical error rate if we are making a level 1 factory)
-        NOTE: This factory takes in noisy |T> magic states and outputs cleaner |T> magic states
+        NOTE: This factory takes in noisy |+> states and outputs clean |T> magic states
     """
     @classmethod
-    def T_factory_15_to_1_Old(cls, d, p_in):
+    def T_factory_15_to_1_Old(cls, d:int, p_in:float) -> MagicFactory:
         
         qubitFootprint = (4*d) * (8*d)
-        numCycles = 6.5*d  #I got this eq from the paper this factory is from under section X. Distillation
+        numCycles = 6.5
+        distillationTime = numCycles * d #I got this eq from the paper this factory is from under section X. Distillation
         outErrorRate = 35 * p_in**3 #assuming that the input of the factory is p_in TODO: this is probably distillation limited and doesnt relate to surface code size
 
         return cls(
-            gate = QuantumGate.T,
-            inputStateCnt = 15,
-            outputStateCnt = 1,
+            gates = [QuantumGate.T],
+            inStateCnts = {QuantumGate.H:15},
+            outStateCnts = {QuantumGate.T:1},
             qubitFootprint = qubitFootprint,
-            outErrorRate = outErrorRate,
-            distillationTime = numCycles,
+            outErrorRates = {QuantumGate.T:outErrorRate},
+            distillationCycles = numCycles,
+            distillationTime = distillationTime,
             codeDistance = d,
         )
     
@@ -96,26 +103,28 @@ class MagicFactory:
             d_CZZ is the code distance used for the CCZ distillation that distills the |T1> states into a CCZ state
     """
     @classmethod
-    def CCZ_factory(cls, T_Factory: MagicFactory, d_CCZ: int):
+    def CCZ_factory(cls, T_Factory: MagicFactory, d_CCZ: int) -> MagicFactory:
         
-        if T_Factory.gate != QuantumGate.T:  #CCZ factory works by using T gates distilled from T factories
-            raise ValueError(f'CCZ_factory param T_Factory must be a T gate factory but was a {T_Factory.gate} gate factory')
+        if T_Factory.gates != [QuantumGate.T]:  #CCZ factory works by using T gates distilled from T factories  PTODO:could update this to accept factories that produce |T> and other gates and just do calculations based on the |T> states
+            raise ValueError(f'CCZ_factory param T_Factory must be a T gate factory but was a {T_Factory.gates} gate factory')
         CCZ_NaiveDistCycleCnt = 4 + (T_Factory.codeDistance/d_CCZ)*3 + 1 + 2 #based on paper [4 stabelizer meas + Tdist/CCZdist*3 T injection + 1 X or Y basis meas + 2 detect err]
-        CCZ_distillationTime = (4 + (T_Factory.codeDistance/d_CCZ)*3) * d_CCZ #we pipeline the factory by starting the production of the next CCZ state after finishing the T injection of the prior CCZ state so when running for a long time it only takes the time to do the injection and measurements.
+        CCZ_distillationCycles = (4 + (T_Factory.codeDistance/d_CCZ)*3) #we pipeline the factory by starting the production of the next CCZ state after finishing the T injection of the prior CCZ state so when running for a long time it only takes the time to do the injection and measurements.
+        CCZ_distillationTime = CCZ_distillationCycles * d_CCZ
         numT1Factories = math.ceil((8*T_Factory.distillationTime)/CCZ_distillationTime) #we need enough T1 factories to produce 8|T> states in the time it takes to make one CCZ state (5.5d_CCZ cycles)
         T1FactoryFootprint = T_Factory.qubitFootprint #The size of a level 1 T gate factory
         CCZFactoryFootprint = 3*6*d_CCZ #The size of just the CCZ distillation part of the CCZ factory
         qubitFootprint = numT1Factories*T1FactoryFootprint + CCZFactoryFootprint #Total space of CCZ distillation (1 CCZdistillation fed by numT1Factories Tgate factories)
-        outErrorRate = 28* (T_Factory.outErrorRate)**2  #TODO: this is the out error rate if it is distillation limited (i.e. the code distance of the T and CCZ factories is high enough that it isn't the source of most error. However, it is possible that with low code distances, it does not get this good) Fix this to adjust error rate based on if the code distance is the bottleneck or if the distillation is the bottle neck.
+        outErrorRate = 28* (T_Factory.outErrorRates[QuantumGate.T])**2  #TODO: this is the out error rate if it is distillation limited (i.e. the code distance of the T and CCZ factories is high enough that it isn't the source of most error. However, it is possible that with low code distances, it does not get this good) Fix this to adjust error rate based on if the code distance is the bottleneck or if the distillation is the bottle neck.
         return cls(
-            gate = QuantumGate.CCZ,
-            inputStateCnt = 15,
-            outputStateCnt = 1,
-            outErrorRate = outErrorRate,
+            gates = [QuantumGate.CCZ],
+            inStateCnts = {QuantumGate.H:15*numT1Factories}, #NOTE: just the CCZ portion takes in 8 |T> states but these take T factories to produce
+            outStateCnts = {QuantumGate.CCZ:1},
+            outErrorRates = {QuantumGate.CCZ:outErrorRate},
+            distillationCycles = CCZ_distillationCycles,
             distillationTime = CCZ_distillationTime,
             qubitFootprint = qubitFootprint,
             codeDistance = d_CCZ,
-            subFactory = T_Factory,
+            subFactories = [T_Factory], #TODO: technically there are numT1Factories, not just 1. I need a way to keep track of how many. Maybe make this a dictionary that is {Factory:cnt}?
         )
     
     """
@@ -123,37 +132,45 @@ class MagicFactory:
         It takes in 15|T>, converts those to |CCZ>, then converts that to 2|T>
     """
     @classmethod
-    def catalyzed_CCZ_to_2T_factory(cls, CCZ_factory: MagicFactory, d_T:int):
-        distillationTime = 6.5 * d_T   #I got this from the figure in the paper, but it may assume no bottleneck in the L1 T or CCZ factories
-        qubitFootprint = CCZ_factory.qubitFootprint + (4*d_T)**2
-        outErrorRate = CCZ_factory.outErrorRate #I think the T states produced have the same error rate as the CCZ states of the CCZ factory (TODO: figure out how this relates to code distance of the factory)
+    def catalyzed2T_factory(cls, CCZ_factory: MagicFactory, d_2T:int) -> MagicFactory:
+        distillationCycles = max(CCZ_factory.distillationCycles+1, 6.5)
+        distillationTime = max(CCZ_factory.distillationTime+d_2T, 6.5 * d_2T) #The figure in the paper says its depth is 6.5d and I am guessing that is the distillation time since it is * d and also with No CCZ bottleneck so I am taking a max of the CCZ cycle time + d_2T cycle to get the math to work (CCZ factory with rate of 5.5d makes a 2T factory 6.5d 2T factory).
+        qubitFootprint = CCZ_factory.qubitFootprint + (4*d_2T)**2
+        outErrorRate = CCZ_factory.outErrorRates[QuantumGate.CCZ] #I think the T states produced have the same error rate as the CCZ states of the CCZ factory (TODO: figure out how this relates to code distance of the factory)
         
         return cls(
-            gate = QuantumGate.T,
-            inputStateCnt = 15,
-            outputStateCnt = 2,
-            outErrorRate = outErrorRate,
+            gates = [QuantumGate.T],
+            inStateCnts = CCZ_factory.inStateCnts,
+            outStateCnts = {QuantumGate.T:2},
+            outErrorRates = {QuantumGate.T:outErrorRate},
+            distillationCycles = distillationCycles,
             distillationTime = distillationTime,
             qubitFootprint = qubitFootprint,
-            codeDistance = d_T,
-            subFactory = CCZ_factory,
+            codeDistance = d_2T,
+            subFactories = [CCZ_factory],
         )
     
-    """This is the square root T factory based on the paper 'Efficient magic state factories with a catalyzed |CCZ> -> 2|T> transformation'"""
-    """This uses 3 CCZ->2T factories which will produce 6 T-gates: 4 to implement logical AND, 1 to implement 2Theta (T) gate, and 1 to slowly build up another sqrt(T) state in case the catalyst gets poisoned"""
-    def sqrtT_factory(cls, C2TFactory:MagicFactory, d:int):
-        qubitFootprint = 3*d**2 + 3*C2TFactory.qubitFootprint #the 3d^2 term comes from the fact that the circuit itself is 3 logical qubits.
-        distillationTime = C2TFactory.distillationTime #the bottleneck will likely be the CCZ factory outputs to be able to run the 3-qbit circuit
+    """
+        This is the square root T factory based on the paper 'Efficient magic state factories with a catalyzed |CCZ> -> 2|T> transformation'
+        This uses T subfactories to produce 5 T states per round: 4 to implement logical AND, 1 to implement 2Theta gate (in this case 2Theta is a T gate),
+    """
+    @classmethod
+    def sqrtT_factory(cls, T_Factory:MagicFactory, d:int) -> MagicFactory:
+        numTFactories = math.ceil(5/T_Factory.outStateCnts[QuantumGate.T]) #Need enough T factories to produce 5 T states (1 for T gate and 4 for logical AND) per cycle
+        qubitFootprint = 3*d**2 + numTFactories*T_Factory.qubitFootprint #the 3d^2 term comes from the fact that the circuit itself is 3 logical qubits.
+        distillationTime = T_Factory.distillationTime #the bottleneck will likely be the CCZ factory outputs to be able to run the 3-qbit circuit
+        distillationCycles = T_Factory.distillationCycles #same reasoning as distillationTime
         #Somehow account for the time to distill the first catalyst state (depends on if you just use synthelization (many T gates) or magically distill it (look at other paper for this. will need to add it as a factory)
         return cls(
-            gate = QuantumGate.sqrtT,
-            inputStateCnt = 3 * C2TFactory.inputStateCnt, #this is ignoring the 2 input |+> states that will turn into sqrt T states because we can directly feed in the qubits we want to apply the sqrt T gate to
-            outputStateCnt = 2,
-            outErrorRate = C2TFactory.outErrorRate, #TODO: figure out if this is actually right. I think it will be a little worse than the CCZ output but it might be the same or something like 2x is since we apply one CCZ that has the error rate and then 1 additional T gate
+            gates = [QuantumGate.sqrtT],
+            inStateCnts = {gate: count*numTFactories for gate,count in T_Factory.inStateCnts.items()}, #this is ignoring the 2 input |+> states that will turn into sqrt T states because we can directly feed in the qubits we want to apply the sqrt T gate to
+            outStateCnts = {QuantumGate.sqrtT:2},
+            outErrorRates = {QuantumGate.sqrtT:T_Factory.outErrorRates[QuantumGate.T]}, #TODO: this will be likely be worse than the input state. additionally the fidelity becomes worse as we run it (O(n)) until the catalyst is poisoned
+            distillationCycles = distillationCycles,
             distillationTime = distillationTime,
             qubitFootprint = qubitFootprint,
             codeDistance = d,
-            subFactory = C2TFactory,
+            subFactories = [T_Factory],
         )
     
     """
@@ -167,28 +184,51 @@ class MagicFactory:
             C2TFactory: the C2T factory used to produce the T states to run the M factories (and possibly also produce the initial catalyst)
             k: the finest grained rotation to produce (adding a phase of e^-ipi(1/2^k)
             d: the code distance used in the M part of the factories
+            TODO: catalystFactories[] should be a list of factories that are used for the initial catalyst state so we can get fidelities and maybe determine better qubit footprint
     """
     @classmethod
-    def catalyzed_Rz_factory(cls, C2TFactory:MagicFactory, k:int, d:int):
-        #TODO: implement factory
+    def catalyzed_Rz_factory(cls, T_Factory:MagicFactory, k:int, d:int) -> MagicFactory:
+        if k < 2:
+            raise ValueError(f"k value should be greater than 2 for catalyzed Rz Factory since k=1->S factory. Got k={k}")
+        if k > 7:
+            raise ValueError(f"currently the catalyzed RZ factory doesnt accept k values greater than 7. Got k={k}") #TODO: sometime fix this
         MfactoryFootprint = 3*d**2 #the M factories use 3 qubits each encoded at distance d^2
-        numMfactories = k-2  #the first non C2T factory is a sqrt(T) factory (M_3) and then you have one M factory after for each k increase
-        numC2TFactories = 1 + 2*numMfactories #each M factory needs 2 C2T factories to apply the logical and gate within them and the first C2T factory produces T states to go into the first M factory
-        qubitFootprint = MfactoryFootprint * numMfactories + C2TFactory.qubitFootprint * numC2TFactories
-        distillationTime = C2TFactory.distillationTime #I am assuming this will be the bottleneck, but there is also a startup period where we distill the catalysts we have to think about
+        numMfactories = k-2  #we dont include k=1 since that would be an S factory. Also dont include k=2 which is a T factory since we will use a normal T factory for that. the first M factory is a sqrt(T) factory (M_2) and so on for each k increase
+        numTFactories = 4/T_Factory.outStateCnts[QuantumGate.T]*numMfactories + 1 #each M factory needs 4 T states to apply the logical and gate within them. The additional 1 is for the T factory that applies the 2theta rotation for the sqrtT factory
+        qubitFootprint = MfactoryFootprint * numMfactories + T_Factory.qubitFootprint * numTFactories
+        distillationTime = T_Factory.distillationTime #I am assuming this will be the bottleneck, but there is also a startup period where we distill the catalysts we have to think about
+        distillationCycles = T_Factory.distillationCycles #same assumption as w/ distillationTime
         
+        #get the list of gates this factory produces and the dictionary of how many of each. NOTE: it produces 2 2^krtT states and 1 of each prior 2^xrtT states down to T gate
+        rootGates = [QuantumGate.sqrtT, QuantumGate.rootT_4, QuantumGate.rootT_8, QuantumGate.rootT_16, QuantumGate.rootT_32]
+        outStates = []
+        outStateCnts = {}
+        for i in range(0,k-3):
+            outStateCnts[rootGates[i]] = 1
+            outStates.append(rootGates[i])
+        outStateCnts[rootGates[k-3]] = 2
+        outStates.append(rootGates[k-3])
+
+        #get the output error rate of each of the output rates
+        #TODO: research what this would actually be (for the time being i am just setting it to the C2T output error rate). May have to do with catalyst fidelity so perhaps pass catalyst fidelity as param and we dont explain how catalyst is formed
+        outErrorRates = {}
+        for state in outStates:
+            outErrorRates[state] = T_Factory.outErrorRates[QuantumGate.T]
+
+
         return cls(
-            gate = None, #TODO: figure out how to represent this gate. its an Rz(1/2^k) gate
-            inputStateCnt = numC2TFactories*5,
-            outputStateCnt = k-1, #TODO: figure out how to represent the output since it outputs different types of states
-            outErrorRate = C2TFactory.outErrorRate, #TODO: figure out if this is the out error rate. I think it moreso is going to depend on how you create the initial catalyst. if we do it by stringing to gether T gates we have to determine the fidelity of this catalyst. perhaps pass catalyst fidelity as param and we dont explain how catalyst is formed
+            gate = outStates,
+            inStateCnts = {gate: count * T_Factory for gate,count in T_Factory.inStateCnts.items()},
+            outStateCnts = outStateCnts,
+            outErrorRates = outErrorRates,
+            distillationCycles = distillationCycles,
             distillationTime = distillationTime,
             qubitFootprint = qubitFootprint,
             codeDistance = d, #TODO: this is just for the M factories so not a good indicator
-            subFactory = C2TFactory
+            subFactory = [T_Factory]
         )
     
-    
+
     #TODO: implement factory based on the technique in the "Even more efficient magic state distillation by zero-level distillation"
     #TODO: other options include magic state cultivation: growing T states as cheap as CNOT gates paper (seems to be way better in space but a little worse in fidelity and time)
     

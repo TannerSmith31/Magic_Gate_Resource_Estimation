@@ -3,8 +3,10 @@ from qiskit import QuantumCircuit
 from qiskit_aer.noise import NoiseModel, pauli_error
 from circuitDecomposer import CircuitDecomposer
 from qiskit.converters import circuit_to_dag
+from qiskit.dagcircuit import DAGOpNode
 from utils import QuantumGate
 from qiskit_aer import AerSimulator
+import itertools
 
 #TODO: go through and change the decompPrecision variable to be a mp floating point rather than just a float.
 class ResourceEstimator:
@@ -12,7 +14,7 @@ class ResourceEstimator:
     quantumCircuit: QuantumCircuit       # The circuit to be run
     decomposedCircuit: QuantumCircuit    # The circuit to be run decomposed into clifford + magic gates that can be produced by the factories
     basisGateset: list[QuantumGate]      # basis gateset for this estimator (clifford + the magic gates that can be produced by the factories)
-    magicGateset: list[QuantumGate]        # set of magic gates being distilled
+    magicGateset: list[QuantumGate]      # set of magic gates being distilled
     codeDistance: int                    # The code distance of error correction on the circuit
     p_phys: float
 
@@ -20,10 +22,10 @@ class ResourceEstimator:
         self.magicFactories = magicFactories
         self.quantumCircuit = quantumCircuit
         self.codeDistance = codeDistance
-        self.p_phys = p_phys
+        self.p_phys = p_phys 
 
         # Look at the list of magic factories and decompose the circuit into the available gates.
-        magicGateset = {factory.gate for factory in self.magicFactories} #create a set of gates from the magic factory
+        magicGateset = {gate for factory in self.magicFactories for gate in factory.gates} #create a set of gates from the magic factory
         basisGateset = list(magicGateset) #convert the magic gateset to a list and assign those gates into the basis gateset, then iterate through the nonclifford gates and add them
         for gate in QuantumGate:
             if gate.isClifford():
@@ -72,27 +74,81 @@ class ResourceEstimator:
         number of magic states and how many magic states can be produced per timestep
             decomposeQC: boolean telling whether to call the decompose function on the circuit within this object or nthe decomposed circuit
     """
-    def calcRuntime(self, decomposeQC:bool = True):
+    def calcRuntime(self, decomposeQC:bool = True) -> float:
         qc = None
         if decomposeQC:
             qc = self.decomposedCircuit
         else:
             qc = self.quantumCircuit
+
+        # create a dictionary to keep track of the totoal number of each type of magic gate in the circuit
+        magicGateCounts = {gate.value: 0 for gate in self.magicGateset}
         
-        circuitDAG = circuit_to_dag(qc) #get the circuit as a DAG
-        magicDepths = {} #dictionary {QuantumGate:int} to store the magic gate and its depth in the circuit
-        # for magicGate in self.magicGateset:
-            # if magicGate == QuantumGate.T:
-            #     magicDepths[magicGate] = circuitDAG.depth(filter_function=lambda x:x.name in ['t', 'tdg'])
-            # if magicGate == QuantumGate.CCZ:
-            #     magicDepths[magicGate] = circuitDAG.depth(filter_function=lambda x:x.name in ['ccz']) #TODO: figure out how qiskit does ccz gates
+        for instruction in qc.data:
+            gateName = instruction.operation.name
+            if gateName in magicGateCounts:
+                magicGateCounts[gateName] += 1
 
+        #create a dictionary to keep track of the depth of each magic gate in the circuit
+        magicGateDepths = self.getMagicDepths(decomposeQC)
+        
+        #calculate the production rate of each of the magic states
+        magicStateProductionRates = {gate: 0 for gate in self.magicGateset} #this will be in AlgoCycles/Tgate  (NOTE: algoCycles are cycles based on the code distance of the algo)
+        for magicFactory in self.magicFactories:
+            for magicOutState in magicFactory.gates: #go through all the produced states
+                #take the factories outStateCnt and divide it by how many operations occur
+                #This will be the number of states output per operation (ill call a 'unit of time') and then multiply that by the number of units of time occur in one code cycle of the algorithm
+                factoryOutputRate = (magicFactory.outStateCnts[magicOutState]/magicFactory.distillationTime)*self.codeDistance
+                
+                #sum up the output rates for each of the factories
+                magicStateProductionRates[magicOutState] += factoryOutputRate
+        
+        #TODO: this has nothing to do with the depth of the circuit, not just total number of gates.
+        #calculate the total number of cycles to generate enough of each magic state and take the largest
+        mostCyclesOfStates= 0
+        for magicState in self.magicGateset:
+            cyclesForCurState = magicGateCounts[magicState]/magicStateProductionRates[magicState]
+            if cyclesForCurState > mostCyclesOfStates:
+                mostCyclesOfStates = cyclesForCurState
+        
+        return mostCyclesOfStates
+    
+    """
+        Function to get the depth of the circuit in relation to each of the magic states. This is calculated by running through the DAG of the circuit and
+        finding the longest path of a certain magic gate that must be executed sequentially.
+        Params:
+            decomposeQC: boolean on whether to use the decomposed circuit or the original circuit
+        Returns:
+            dictionary of {magicGate: depth} pairs
+    """
+    def getMagicDepths(self,decomposeQC:bool=True) -> dict[QuantumGate,int]:
+        qc = self.decomposedCircuit if decomposeQC else self.quantumCircuit
 
-        #figure out what the longest path of gates is 
-        #TODO: need a way to calculate how long the circuit will take to run
-        #This will have to do with how many magic factories are running and how many cycles we need to wait for enough states
-        #get the magic state depth. Figure out what magic factories are producing what states
-        return
+        circuitDAG = circuit_to_dag(qc)
+        nodeMagicDepths = {}
+        maxMagicDepths = {gate:0 for gate in self.magicGateset}
+
+        for node in circuitDAG.topological_nodes():  #Iterate through nodes in topological order
+            predNodeList = list(circuitDAG.predecessors(node)) #create an iterator that goes over the predecessor nodes and convert it to a list
+            nodeMagicDepths[node] = {} #initialize the subdictionary in this node for all the magic states
+
+            for magicGate in self.magicGateset:
+                #If there are no predecessors, add the node to the dictionary and set its value to 0
+                if len(predNodeList) < 1:
+                    nodeMagicDepths[node][magicGate] = 0
+                #otherwise go through predecessors and calculate this nodes depth by taking the max (then later adding 1 if its a magic gate)
+                else:
+                    nodeMagicDepths[node][magicGate] = max(nodeMagicDepths[p][magicGate] for p in predNodeList)
+
+                #if the current node is the magic gate we are counting, we add one to its depth
+                if isinstance(node, DAGOpNode) and node.op.name == magicGate.value:
+                    nodeMagicDepths[node][magicGate] += 1
+                
+                #check if the depth for the current node & gate is greater than the max seen for this magic gate
+                if nodeMagicDepths[node][magicGate] > maxMagicDepths[magicGate]:
+                    maxMagicDepths[magicGate] = nodeMagicDepths[node][magicGate]
+        
+        return maxMagicDepths
 
     """
         Function to run the circuit (decomposed or original depending on 'decomposeQC' variable) and determine runtime statistics of the algorithm (fidelity, etc.)
@@ -101,6 +157,9 @@ class ResourceEstimator:
             idealClifford: boolean to tell whether noise should be added to the circuit itself, or just to the magic gates
     """
     def runCircuit(self, shots:int=1000, decomposeQC:bool=True, idealCliffords:bool=True):
+        
+        qc = self.decomposedCircuit if decomposeQC else self.quantumCircuit
+        
         ###GENERATING NOISE MODEL###
         p_th = 0.01  #based on surface codes from 'Surface codes towards practical quantum computing'
         
@@ -116,53 +175,68 @@ class ResourceEstimator:
 
         ## Add noise to cliffords if chosen
         if not idealCliffords:
-            ## ONE QUBIT ERROR
-            # Symmetric logical Pauli channel
-            logical_error = pauli_error([
-                ('X', p_L / 3),
-                ('Y', p_L / 3),
-                ('Z', p_L / 3),
-                ('I', 1 - p_L)
-            ])
-
-            ## Apply to all logical single- and two-qubit gates
-            all_gates = ['x', 'y', 'z', 'h', 'sx', 'id']
-            noiseModel.add_all_qubit_quantum_error(logical_error, all_gates)
+            magicGateNames = [gate.value for gate in self.magicGateset] #get the names of all the magic gates
+            allCircuitGates = qc.count_ops().keys() #get the names of all the gates in the circuit
             
-            ## 2 QUBIT ERROR
-            # All 15 non-identity two-qubit Paulis
-            paulis_2q = []
-            single = ["I", "X", "Y", "Z"]
+            nonMagicGates1q = []
+            nonMagicGates2q = []
 
-            for p1 in single:
-                for p2 in single:
-                    op = p1 + p2
-                    if op != "II":
-                        paulis_2q.append(op)
+            for gateName in allCircuitGates:
+                #skip if gateName is a magic gate (or a barrier)
+                if gateName in magicGateNames or gateName == 'barrier':
+                    continue
 
-            prob_per_term = p_L / len(paulis_2q)
+                inst = qc.find_instruction(gateName)[0].operation
 
-            two_qubit_channel = [(op, prob_per_term) for op in paulis_2q]
-            two_qubit_channel.append(("II", 1 - p_L))
-            two_qubit_error = pauli_error(two_qubit_channel)
-            two_qubit_gates = ["cx", "cz", "swap"]
+                if inst.num_qubits == 1:
+                    nonMagicGates1q.append(gateName)
+                elif inst.num_qubits == 2:
+                    nonMagicGates2q.append(gateName)
+                else:
+                    print(f"WARNING: found a gate in the circuit with more than 3 qubits: {gateName}. Noise not automatically applied")
 
-            noiseModel.add_all_qubit_quantum_error(two_qubit_error, two_qubit_gates)        
+            
+            err_1q = pauli_error([('X', p_L/3), ('Y', p_L/3), ('Z', p_L/3), ('I', 1-p_L)])
+            paulis = ["".join(p) for p in itertools.product("IXYZ", repeat=2) if "".join(p) != "II"]
+            err_2q = pauli_error([(op, p_L/15) for op in paulis] + [("II", 1-p_L)])
+
+            ## Apply to all logical single- and two-qubit gate errors
+            noiseModel.add_all_qubit_quantum_error(err_1q, nonMagicGates1q)
+            noiseModel.add_all_qubit_quantum_error(err_2q, nonMagicGates2q)
         
-        ## TODO: add error to magic gates based on fidelity of factories
-        #FOR EACH FACTORY
-            #ADD ERROR TO THOSE MAGIC GATES BASED ON THE MAGIC GATE OUTPUT ERROR RATE
+        ## Add noise to magic gates based on distillation fidelity
+        magicGatesetFidelities = {g:0 for g in self.magicGateset}
+        for gate in self.magicGateset:
+            #Ideally, to get the average fidelity of the magic states being produced, lets say we have three factories A B and C that produce states
+            #at rates Ra, Rb, and Rc (Tgates per unitTime where uniTime is cycles * codeDistance^2 since a cycle is the time to measure all the
+            #stabelizers which is proportional to d^2), and produce magic states with fidelities Fa, Fb, Fc, then we can say the average fidelity 
+            # will be (Ra/(Ra+Rb+Rc))*Fa + (Rb/(Ra+Rb+Rc))*Fb + (Rc/(Ra+Rb+Rc))*Fc = (Ra*Fa + Rb*Fb + Rc*Fc)/(Ra + Rb + Rc) so we wil have a variable 
+            # storing the denominator sum (Ra+Rb+Rc) and one that is saving the numerator sum (Ra*Fa + Rb*Fb + Rc*Fc)
+            fidelityRatioSum = 0 #numerator
+            productionRateSum = 0 #denominator
+            for magicFactory in self.magicFactories:
+                for outMagicGate in magicFactory.gates:
+                    if outMagicGate == gate:
+                        #get the magic states produced per unit of time by taking the number of states output and dividing it by the distillation time
+                        curFactoryProductionRate = magicFactory.outStateCnts[gate]/magicFactory.distillationTime
+                        productionRateSum += curFactoryProductionRate
+                        fidelityRatioSum += curFactoryProductionRate * (1-magicFactory.outErrorRates[outMagicGate]) #fidelity of the output state is 1-error
+            
+            magicGatesetFidelities[gate] = fidelityRatioSum/productionRateSum  #TODO: error check for division by zero here and the above parts of this loop that have a division
 
-        backend = AerSimulator(noise_model = noiseModel)
+        #go through the error rates for each of the magic states and add them to their respective gates.
+        for magicGate in self.magicGateset:
+            magicGateErr = 1-magicGatesetFidelities[magicGate]
+            magic_err = pauli_error([('Z', magicGateErr), ('I', 1 - magicGateErr)]) # T-gates usually suffer Z-errors
+            noiseModel.add_all_qubit_quantum_error(magic_err, [magicGate.value])
 
-        if decomposeQC:
-            pass #TODO: run circuit on self.decomposedQC
-        else:
-            pass #TODO: run circuit on self.quantumCircuit
+        ### USING NOISE MODEL TO RUN CIRCUIT ###
+        simulator = AerSimulator(noise_model = noiseModel) #set noise model into simulator backend
+        job = simulator.run(qc, shots=shots)
+        results = job.results()
+        counts = results.get_counts()
 
-        ## return counts
-
-        return
+        return counts
 
     """
         Do a resource analysis of the given circuit using the magic factories provided
