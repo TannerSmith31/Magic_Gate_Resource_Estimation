@@ -84,7 +84,7 @@ class CircuitDecomposer:
 			[inputMatrix[0][0], inputMatrix[0][1], 0],
 			[inputMatrix[1][0], inputMatrix[1][1], 0],
 			[0, 0, 1]]
-		# rotation = Rotation.from_matrix(biggerMatrix).as_euler('zyx')[0]
+		theta = Rotation.from_matrix(biggerMatrix).as_euler('zyx')[0]
 		cgc = 1/math.sqrt(2)
 		bound = cgc * math.sqrt(self.decompositionError)
 		identity = np.identity(2)
