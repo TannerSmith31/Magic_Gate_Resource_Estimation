@@ -1,5 +1,4 @@
 import math
-
 from qiskit import QuantumCircuit
 from qiskit.circuit import CircuitInstruction
 from qiskit.circuit.library.standard_gates import get_standard_gate_name_mapping
@@ -8,12 +7,13 @@ from qiskit_aer import AerSimulator
 from qiskit.visualization import plot_histogram
 from typing import Literal
 from pygridsynth.gridsynth import gridsynth_gates, gridsynth_circuit
-from utils import QuantumGate, dagger, operatorNorm
 import mpmath
 import numpy as np
 from scipy.linalg import sqrtm
 from scipy.stats import unitary_group
 from scipy.spatial.transform import Rotation
+
+from src.utils import QuantumGate, dagger, operatorNorm
 
 class CircuitDecomposer:
 	gateSet: list[QuantumGate]        #List of gates that we will decompose the arbitrary circuit into
