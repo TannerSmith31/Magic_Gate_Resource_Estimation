@@ -3,9 +3,10 @@ from qiskit_aer import AerSimulator
 from qiskit.visualization import plot_histogram
 from typing import Literal
 from pygridsynth.gridsynth import gridsynth_gates, gridsynth_circuit
-from utils import QuantumGate
 import mpmath
-import trasyn
+# import trasyn
+
+from src.utils import QuantumGate
 
 class CircuitDecomposer:
     gateSet: list[QuantumGate]        #List of gates that we will decompose the arbitrary circuit into

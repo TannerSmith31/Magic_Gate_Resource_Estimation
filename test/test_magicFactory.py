@@ -83,4 +83,15 @@ def test_sqrtT_factory():
     assert mockSqrtTFactory.subFactories == [mockTFactory]
 
 def test_catalyzedRz_fatory():
-    assert True #TODO: IMPLEMENT THIS
+    mockTFactory = MagicFactory([QuantumGate.T], {QuantumGate.H:8},{QuantumGate.T:2},{QuantumGate.T:1e-9}, 8.5,59.5, 200,7)
+    mockRZFactory = MagicFactory.catalyzed_Rz_factory(mockTFactory,5,7)
+
+    assert mockRZFactory.gates == [QuantumGate.sqrtT, QuantumGate.rootT_4, QuantumGate.rootT_8]
+    assert mockRZFactory.inStateCnts == {QuantumGate.H:56}  #should have taken in 4*3+1 = 13 mockTFactories each with 8 input states
+    assert mockRZFactory.outStateCnts == {QuantumGate.sqrtT:1, QuantumGate.rootT_4:1, QuantumGate.rootT_8:2}
+    assert mockRZFactory.outErrorRates == pytest.approx({QuantumGate.sqrtT:1e-9,QuantumGate.rootT_4:1e-9,QuantumGate.rootT_8:1e-9}, 1e-10)
+    assert mockRZFactory.distillationCycles == 8.5
+    assert mockRZFactory.distillationTime == 59.5
+    assert mockRZFactory.qubitFootprint == 1841
+    assert mockRZFactory.codeDistance == 7
+    assert mockRZFactory.subFactories == [mockTFactory]

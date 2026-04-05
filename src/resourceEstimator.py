@@ -1,53 +1,55 @@
-from magicFactory import MagicFactory
 from qiskit import QuantumCircuit
 from qiskit_aer.noise import NoiseModel, pauli_error
-from circuitDecomposer import CircuitDecomposer
 from qiskit.converters import circuit_to_dag
 from qiskit.dagcircuit import DAGOpNode
-from utils import QuantumGate
 from qiskit_aer import AerSimulator
 import itertools
+
+from src.circuitDecomposer import CircuitDecomposer
+from src.utils import QuantumGate
+from src.magicFactory import MagicFactory
 
 #TODO: go through and change the decompPrecision variable to be a mp floating point rather than just a float.
 class ResourceEstimator:
     magicFactories: list[MagicFactory]   # List of magic factories on the chip to run the algo
-    quantumCircuit: QuantumCircuit       # The circuit to be run
-    decomposedCircuit: QuantumCircuit    # The circuit to be run decomposed into clifford + magic gates that can be produced by the factories
     basisGateset: list[QuantumGate]      # basis gateset for this estimator (clifford + the magic gates that can be produced by the factories)
     magicGateset: list[QuantumGate]      # set of magic gates being distilled
     codeDistance: int                    # The code distance of error correction on the circuit
     p_phys: float
 
-    def __init__(self, magicFactories: list[MagicFactory], quantumCircuit: QuantumCircuit, codeDistance:int, p_phys:float, decompPrecision:float):
+    def __init__(self, magicFactories: list[MagicFactory], codeDistance:int, p_phys:float):
         self.magicFactories = magicFactories
-        self.quantumCircuit = quantumCircuit
         self.codeDistance = codeDistance
         self.p_phys = p_phys 
 
-        # Look at the list of magic factories and decompose the circuit into the available gates.
+        # Look at the list of magic factories to get the magic basis
+        if not magicFactories:
+            raise ValueError("must pass a list of magic factories when creating a ResourceEstimator")
         magicGateset = {gate for factory in self.magicFactories for gate in factory.gates} #create a set of gates from the magic factory
         basisGateset = list(magicGateset) #convert the magic gateset to a list and assign those gates into the basis gateset, then iterate through the nonclifford gates and add them
+        
+        #add clifford gates to the basis gateset
         for gate in QuantumGate:
-            if gate.isClifford():
+            if gate.isClifford:
                 basisGateset.append(gate)
         
+        #add the basis gateset and magic gateset to the resource estimator
         self.basisGateset = list(basisGateset)
         self.magicGateset = magicGateset
-        self.decomposedCircuit = self.decomposeToCliffordPlusMagic(self, decompPrecision) #decompose the circuit and set it in the estimator
 
     """
         Function to decompose circuit into Clifford + whatever magic state is made by the factories
-            precision: How close we want each gate to be to the target unitary (TODO: determine if this should be per gate, or full circuit decomp precision [i.e. we want the full circuit, when treated as a unitary, to be within the precision of the original])
+            decompPrecision: How close we want each gate to be to the target unitary (TODO: determine if this should be per gate, or full circuit decomp precision [i.e. we want the full circuit, when treated as a unitary, to be within the precision of the original])
     """
-    def decomposeToCliffordPlusMagic(self, precision:float):
+    def decomposeToCliffordPlusMagic(self, qc:QuantumCircuit, decompPrecision:float):
         # Raise an error if magicFactories or quantumCircuit is null.
         if self.magicFactories == None:
             raise ValueError("ResourceEstimator.magicFactories should not be null.")
-        if self.quantumCircuit == None:
+        if qc == None:
             raise ValueError("ResourceEstimator.quantumCircuit should not be null.")
 
         # create a decomposer for our gateset and decompose the circuit
-        decomposer = CircuitDecomposer(self.basisGateset, precision, self.quantumCircuit)
+        decomposer = CircuitDecomposer(self.basisGateset, decompPrecision, qc)
         decomposedCircuit = decomposer.decomposeToGateset()
         return decomposedCircuit
     
@@ -72,15 +74,8 @@ class ResourceEstimator:
     """
         Function to calculate how long the algorithm will take to run. It considers the number of cycles needed to produces the required
         number of magic states and how many magic states can be produced per timestep
-            decomposeQC: boolean telling whether to call the decompose function on the circuit within this object or nthe decomposed circuit
     """
-    def calcRuntime(self, decomposeQC:bool = True) -> float:
-        qc = None
-        if decomposeQC:
-            qc = self.decomposedCircuit
-        else:
-            qc = self.quantumCircuit
-
+    def calcRuntime(self, qc:QuantumCircuit) -> float:
         # create a dictionary to keep track of the totoal number of each type of magic gate in the circuit
         magicGateCounts = {gate.value: 0 for gate in self.magicGateset}
         
@@ -90,7 +85,7 @@ class ResourceEstimator:
                 magicGateCounts[gateName] += 1
 
         #create a dictionary to keep track of the depth of each magic gate in the circuit
-        magicGateDepths = self.getMagicDepths(decomposeQC)
+        magicGateDepths = self.getMagicDepths(qc)
         
         #calculate the production rate of each of the magic states
         magicStateProductionRates = {gate: 0 for gate in self.magicGateset} #this will be in AlgoCycles/Tgate  (NOTE: algoCycles are cycles based on the code distance of the algo)
@@ -117,13 +112,11 @@ class ResourceEstimator:
         Function to get the depth of the circuit in relation to each of the magic states. This is calculated by running through the DAG of the circuit and
         finding the longest path of a certain magic gate that must be executed sequentially.
         Params:
-            decomposeQC: boolean on whether to use the decomposed circuit or the original circuit
+            qc: The quantum circuit to get the depth of magic gates of
         Returns:
             dictionary of {magicGate: depth} pairs
     """
-    def getMagicDepths(self,decomposeQC:bool=True) -> dict[QuantumGate,int]:
-        qc = self.decomposedCircuit if decomposeQC else self.quantumCircuit
-
+    def getMagicDepths(self,qc:QuantumCircuit) -> dict[QuantumGate,int]:
         circuitDAG = circuit_to_dag(qc)
         nodeMagicDepths = {}
         maxMagicDepths = {gate:0 for gate in self.magicGateset}
@@ -156,10 +149,7 @@ class ResourceEstimator:
             decomposeQC: boolean to tell whether to run the decomposed circuit or the original circuit. Defaults to True (using the decomposed circuit)
             idealClifford: boolean to tell whether noise should be added to the circuit itself, or just to the magic gates
     """
-    def runCircuit(self, shots:int=1000, decomposeQC:bool=True, idealCliffords:bool=True):
-        
-        qc = self.decomposedCircuit if decomposeQC else self.quantumCircuit
-        
+    def runCircuit(self, qc:QuantumCircuit, shots:int=1000, idealCliffords:bool=True):        
         ###GENERATING NOISE MODEL###
         p_th = 0.01  #based on surface codes from 'Surface codes towards practical quantum computing'
         
@@ -242,7 +232,7 @@ class ResourceEstimator:
         Do a resource analysis of the given circuit using the magic factories provided
         Determine cycles to run (runtime), space on chip (magic factory + errorcorrection + algo), 
     """
-    def analyzeCircuit(self):
+    def analyzeCircuit(self, qc:QuantumCircuit, decompPrecision:float):
         #Decompose circuit based on magic factories  (ALREADY DONE WHEN RESOURCE ESTIMATOR IS CREATED. MAYBE CHANGE THIS TO BE DONE AFTER AND DECOMPOSED CIRCUIT IS PASSED IN?)
 
         #Calculate footprint

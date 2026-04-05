@@ -177,7 +177,7 @@ class MagicFactory:
         Factory to produce a series of arbitrarily small rotations. Uses the generalized C2T factory from 'Efficient magic state factories with a catalyzed |CCZ>->2|T> transformation'
         Starts with a C2T factory which produces 2T states, one is output and one is fed into the sqrt(T) factory (M_3). This factory produces 2 sqrt(T) gates, one is ouput the next
         is fed into the next factory M_4 and so on until M_k. the M_k factory outputs both its states.
-        an M_k factory produces phases of e^ipi(1/2^k). Thus a M_0=Z, M_1=S, M_2=T, M_3=sqrt(T),...
+        an M_k factory produces phases of e^ipi(1/2^k). Thus a M_0=Z, M_1=S, M_2=T, M_3=sqrt(T),, M_4=4rt(T)...
         This factory outputs 1 of each state |M_n> for 2<=n<=k-1 and 2 |M_k> states
         
         Params:
@@ -192,9 +192,11 @@ class MagicFactory:
             raise ValueError(f"k value should be greater than 2 for catalyzed Rz Factory since k=1->S factory. Got k={k}")
         if k > 7:
             raise ValueError(f"currently the catalyzed RZ factory doesnt accept k values greater than 7. Got k={k}") #TODO: sometime fix this
+        if QuantumGate.T not in T_Factory.gates:
+            raise ValueError(f"T_Factory param must produce T gates")
         MfactoryFootprint = 3*d**2 #the M factories use 3 qubits each encoded at distance d^2
         numMfactories = k-2  #we dont include k=1 since that would be an S factory. Also dont include k=2 which is a T factory since we will use a normal T factory for that. the first M factory is a sqrt(T) factory (M_2) and so on for each k increase
-        numTFactories = 4/T_Factory.outStateCnts[QuantumGate.T]*numMfactories + 1 #each M factory needs 4 T states to apply the logical and gate within them. The additional 1 is for the T factory that applies the 2theta rotation for the sqrtT factory
+        numTFactories = math.ceil((4*numMfactories+1)/T_Factory.outStateCnts[QuantumGate.T]) #each M factory needs 4 T states to apply the logical and gate within them. The additional 1 is for the T factory that applies the 2theta rotation for the sqrtT factory
         qubitFootprint = MfactoryFootprint * numMfactories + T_Factory.qubitFootprint * numTFactories
         distillationTime = T_Factory.distillationTime #I am assuming this will be the bottleneck, but there is also a startup period where we distill the catalysts we have to think about
         distillationCycles = T_Factory.distillationCycles #same assumption as w/ distillationTime
@@ -217,15 +219,15 @@ class MagicFactory:
 
 
         return cls(
-            gate = outStates,
-            inStateCnts = {gate: count * T_Factory for gate,count in T_Factory.inStateCnts.items()},
+            gates = outStates,
+            inStateCnts = {gate: count * numTFactories for gate,count in T_Factory.inStateCnts.items()},
             outStateCnts = outStateCnts,
             outErrorRates = outErrorRates,
             distillationCycles = distillationCycles,
             distillationTime = distillationTime,
             qubitFootprint = qubitFootprint,
             codeDistance = d, #TODO: this is just for the M factories so not a good indicator
-            subFactory = [T_Factory]
+            subFactories = [T_Factory]
         )
     
 
