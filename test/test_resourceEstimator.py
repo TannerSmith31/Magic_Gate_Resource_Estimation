@@ -231,12 +231,3 @@ def test_runCircuit_highFidelityT_nonIdealClifford_lowCodeDist():
 
     assert abs(avg1Counts - 221) > 200   #ideal |1> count is 221, so it should be close to this since code distance is high
 
-
-
-
-
-
-
-
-
-
