@@ -16,8 +16,10 @@ from qiskit.synthesis import OneQubitEulerDecomposer
 #from tensorflow_graphics.geometry.transformation.axis_angle import from_euler
 import quaternionic
 from math import cos, sqrt, inf, sin
-from sympy import pprint, solveset, Symbol
+from sympy import MatrixSymbol, pprint, solveset, Symbol
 import sympy
+from sympy.physics.quantum.dagger import Dagger
+from sympy.physics.quantum import UnitaryOperator
 
 from src.utils import QuantumGate, dagger, operatorNorm
 
@@ -37,9 +39,19 @@ class CircuitDecomposer:
 		for gate in gateSet:
 			if QuantumGate(gate).is_2x2:
 				self.gateSet2x2.append(gate)
+		self.cApprox = 4 * sqrt(2)
+		self.epsilon = {}
 
 	def decomposeToGateset(self):
-		self.options = self.basicApproximationHelper(3, [[]]) # TODO: Find a good numGates.
+		names = get_standard_gate_name_mapping()
+		self.options = self.basicApproximationHelper(4, [[]]) # TODO: Find a good numGates.
+		self.matrixOptions = []
+		for option in self.options:
+			currMatrix = np.identity(2)
+			for gate in option:
+				gateMatrix = names[gate.name.lower()].to_matrix()
+				currMatrix = np.matmul(currMatrix, gateMatrix)
+		self.matrixOptions.append(currMatrix)
 		# Use numpy matrices.
 		#if 'T' in self.gateSet:
 			#return self.decomposeToCliffordPlusT()
@@ -49,7 +61,11 @@ class CircuitDecomposer:
 			#Check if the instruction is already in self.gateSet first.
 
 			U = inst.matrix
-			decomposedGate = self.solovayKitaev(U, 5)
+			n = 5
+			self.epsilon[0] = 1/64
+			for i in range(1, n + 1):
+				self.epsilon[i] = self.cApprox * self.epsilon[i - 1] ** (3/2)
+			decomposedGate = self.solovayKitaev(U, n)
 
 		#TODO: set the decomposedCircuit to the one we just created and then return the decomposed circuit
 		return "TODO: IMPLEMENT decomposeToGateset function"
@@ -71,22 +87,20 @@ class CircuitDecomposer:
 		names = get_standard_gate_name_mapping()
 		currentOption = None
 		minOperatorNorm = inf
-		for option in self.options:
-			currMatrix = np.identity(2)
-			for gate in option:
-				gateMatrix = names[gate.name.lower()].to_matrix()
-				currMatrix = np.matmul(currMatrix, gateMatrix)
+		for option in self.matrixOptions:
 			
-			optionOperatorNorm = operatorNorm(U, currMatrix)
+			optionOperatorNorm = operatorNorm(U, option)
 			if optionOperatorNorm < minOperatorNorm:
 				minOperatorNorm = optionOperatorNorm
-				currentOption = currMatrix
+				currentOption = option
 			
 		return currentOption
 	
-	def gcDecompose(self, inputMatrix):
+	def gcDecompose(self, inputMatrix, n):
+		print(inputMatrix)
 		done = False
 		cgc = 1/sqrt(2)
+		
 		bound = cgc * sqrt(self.decompositionError)
 		identity = np.identity(2)
 		v = None
@@ -98,18 +112,28 @@ class CircuitDecomposer:
 		leftSide = sin(theta / 2)
 		# 0 = (1 - cos(phi)) * sqrt(1 - (1/8) * (3 - 4 * cos(phi) + cos(2 * phi))) - leftSide
 		x = Symbol('x')
+		# A bug makes this sometimes an empty set.
 		phis = solveset((1 - sympy.cos(x)) * sympy.sqrt(1 - (1/8) * (3 - 4 * sympy.cos(x) + sympy.cos(2 * x))) - leftSide, x, sympy.Reals)
+
+		vSymbol = MatrixSymbol('v', 2, 2)
+		wSymbol = MatrixSymbol('w', 2, 2)
+
+		negatedInput = sympy.Matrix(inputMatrix * -1)
+
+		#vs, ws = solveset(sympy.MatAdd(negatedInput, sympy.MatMul(vSymbol, wSymbol, Dagger(vSymbol), Dagger(wSymbol))), sympy.FiniteSet(vSymbol, wSymbol), UnitaryOperator)
+
 		pprint(phis)
-		n = 0
+		i = 0
 		iterable = iter(phis)
+		quat = quat.ndarray
 		while not done:
 			phi = next(iterable)
 			v = RXGate(float(phi)).to_matrix()
 			w = RYGate(float(phi)).to_matrix()
-			print(operatorNorm(identity, v), bound)
-			if operatorNorm(identity, v) < bound:
+			print(operatorNorm(identity, v), sqrt(self.epsilon[n]/2))
+			if operatorNorm(identity, v) < sqrt(self.epsilon[n]/2):
 				done = True
-			n += 1
+			i += 1
 		return v, w
 
 	# function Solovay-Kitaev(Gate U , depth n)
@@ -123,9 +147,7 @@ class CircuitDecomposer:
 			# Set Un−1 = Solovay-Kitaev(U, n − 1)
 			UNMinusOne = self.solovayKitaev(U, n - 1)
 			# Set V , W = GC-Decompose(U U^†_{n − 1})
-			#print(np.matmul(U, dagger(UNMinusOne)))
-			#print(np.matmul(dagger(UNMinusOne), U))
-			V, W = self.gcDecompose(np.matmul(U, dagger(UNMinusOne)))
+			V, W = self.gcDecompose(np.matmul(U, dagger(UNMinusOne)), n)
 			# Set Vn−1 = Solovay-Kitaev(V ,n − 1)
 			VNMinusOne = self.solovayKitaev(V, n - 1)
 			# Set Wn−1 = Solovay-Kitaev(W ,n − 1)
