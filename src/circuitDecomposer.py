@@ -64,7 +64,8 @@ class CircuitDecomposer:
 			n = 5
 			self.epsilon[0] = 1/64
 			for i in range(1, n + 1):
-				self.epsilon[i] = self.cApprox * self.epsilon[i - 1] ** (3/2)
+				#self.epsilon[i] = self.cApprox * self.epsilon[i - 1] ** (3/2)
+				self.epsilon[i] = (self.cApprox ** 2 * self.epsilon[0]) ** (3/2) ** n / self.cApprox ** 2
 			decomposedGate = self.solovayKitaev(U, n)
 
 		#TODO: set the decomposedCircuit to the one we just created and then return the decomposed circuit
@@ -97,7 +98,6 @@ class CircuitDecomposer:
 		return currentOption
 	
 	def gcDecompose(self, inputMatrix, n):
-		print(inputMatrix)
 		done = False
 		cgc = 1/sqrt(2)
 		
@@ -113,6 +113,7 @@ class CircuitDecomposer:
 		# 0 = (1 - cos(phi)) * sqrt(1 - (1/8) * (3 - 4 * cos(phi) + cos(2 * phi))) - leftSide
 		x = Symbol('x')
 		# A bug makes this sometimes an empty set.
+		# This line confirmed to work.
 		phis = solveset((1 - sympy.cos(x)) * sympy.sqrt(1 - (1/8) * (3 - 4 * sympy.cos(x) + sympy.cos(2 * x))) - leftSide, x, sympy.Reals)
 
 		vSymbol = MatrixSymbol('v', 2, 2)
@@ -123,24 +124,25 @@ class CircuitDecomposer:
 		#vs, ws = solveset(sympy.MatAdd(negatedInput, sympy.MatMul(vSymbol, wSymbol, Dagger(vSymbol), Dagger(wSymbol))), sympy.FiniteSet(vSymbol, wSymbol), UnitaryOperator)
 
 		pprint(phis)
-		i = 0
 		iterable = iter(phis)
 		quat = quat.ndarray
 		while not done:
 			phi = next(iterable)
+			#print(sin(theta / 2), (1 - cos(phi)) * sqrt(1 - (1/8) * (3 - 4 * cos(phi) + cos(2 * phi))), 2 * sin(phi / 2) ** 2 * sqrt(1 - sin(phi/2) ** 4))
 			v = RXGate(float(phi)).to_matrix()
 			w = RYGate(float(phi)).to_matrix()
-			print(operatorNorm(identity, v), sqrt(self.epsilon[n]/2))
+			#print(operatorNorm(identity, v), sqrt(self.epsilon[n]/2))
 			if operatorNorm(identity, v) < sqrt(self.epsilon[n]/2):
 				done = True
-			i += 1
 		return v, w
 
 	# function Solovay-Kitaev(Gate U , depth n)
 	def solovayKitaev(self, U , n):
+		#print("I: ", np.matmul(U, dagger(U)))
 		# if (n == 0)
 		if n == 0:
 			# Return Basic Approximation to U
+			print('SK: ', 0, operatorNorm(U, self.basicApproximation(U)))
 			return self.basicApproximation(U)
 		# else
 		else:
@@ -153,6 +155,7 @@ class CircuitDecomposer:
 			# Set Wn−1 = Solovay-Kitaev(W ,n − 1)
 			WNMinusOne = self.solovayKitaev(W, n - 1)
 			# Return Un = Vn−1Wn−1V †  n−1W †  n−1Un−1;
+			print('SK: ', n, operatorNorm(U, np.matmul(np.matmul(np.matmul(np.matmul(VNMinusOne, WNMinusOne), dagger(VNMinusOne)), dagger(WNMinusOne)), UNMinusOne)))
 			return np.matmul(np.matmul(np.matmul(np.matmul(VNMinusOne, WNMinusOne), dagger(VNMinusOne)), dagger(WNMinusOne)), UNMinusOne)
 	
 	def decomposeToCliffordPlusT(self):
