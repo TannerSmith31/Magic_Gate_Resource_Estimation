@@ -44,7 +44,7 @@ class CircuitDecomposer:
 
 	def decomposeToGateset(self):
 		names = get_standard_gate_name_mapping()
-		self.options = self.basicApproximationHelper(4, [[]]) # TODO: Find a good numGates.
+		self.options = self.basicApproximationHelper(6, [[]]) # TODO: Find a good numGates.
 		self.matrixOptions = []
 		for option in self.options:
 			currMatrix = np.identity(2)
@@ -61,8 +61,8 @@ class CircuitDecomposer:
 			#Check if the instruction is already in self.gateSet first.
 
 			U = inst.matrix
-			n = 5
-			self.epsilon[0] = 1/64
+			n = 7
+			self.epsilon[0] = 0.14
 			for i in range(1, n + 1):
 				#self.epsilon[i] = self.cApprox * self.epsilon[i - 1] ** (3/2)
 				self.epsilon[i] = (self.cApprox ** 2 * self.epsilon[0]) ** (3/2) ** n / self.cApprox ** 2
@@ -114,7 +114,12 @@ class CircuitDecomposer:
 		x = Symbol('x')
 		# A bug makes this sometimes an empty set.
 		# This line confirmed to work.
-		phis = solveset((1 - sympy.cos(x)) * sympy.sqrt(1 - (1/8) * (3 - 4 * sympy.cos(x) + sympy.cos(2 * x))) - leftSide, x, sympy.Reals)
+		phis = solveset(((1 - sympy.cos(x)) * sympy.sqrt(1 - (1/8) * (3 - 4 * sympy.cos(x) + sympy.cos(2 * x))) - leftSide), x, sympy.Reals)
+		if phis == sympy.EmptySet:
+			phis = solveset(((1 - sympy.cos(x)) * sympy.sqrt(1 - (1/8) * (3 - 4 * sympy.cos(x) + sympy.cos(2 * x))) - leftSide) ** 2, x, sympy.Reals)
+			if phis == sympy.EmptySet:
+				phis = solveset(((1 - sympy.cos(x)) * sympy.sqrt(1 - (1/8) * (3 - 4 * sympy.cos(x) + sympy.cos(2 * x))) - leftSide) ** 3, x, sympy.Reals)
+
 
 		vSymbol = MatrixSymbol('v', 2, 2)
 		wSymbol = MatrixSymbol('w', 2, 2)
@@ -147,12 +152,16 @@ class CircuitDecomposer:
 		# else
 		else:
 			# Set Un−1 = Solovay-Kitaev(U, n − 1)
+			print('a')
 			UNMinusOne = self.solovayKitaev(U, n - 1)
 			# Set V , W = GC-Decompose(U U^†_{n − 1})
+			print(np.matmul(U, dagger(UNMinusOne)))
 			V, W = self.gcDecompose(np.matmul(U, dagger(UNMinusOne)), n)
 			# Set Vn−1 = Solovay-Kitaev(V ,n − 1)
+			print('b')
 			VNMinusOne = self.solovayKitaev(V, n - 1)
 			# Set Wn−1 = Solovay-Kitaev(W ,n − 1)
+			print('c')
 			WNMinusOne = self.solovayKitaev(W, n - 1)
 			# Return Un = Vn−1Wn−1V †  n−1W †  n−1Un−1;
 			print('SK: ', n, operatorNorm(U, np.matmul(np.matmul(np.matmul(np.matmul(VNMinusOne, WNMinusOne), dagger(VNMinusOne)), dagger(WNMinusOne)), UNMinusOne)))
